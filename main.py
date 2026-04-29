@@ -152,6 +152,10 @@ class BVC_OT_RollBack(bpy.types.Operator):
     def poll(cls, context):
         wm = context.window_manager
         return len(wm.bvc_versions) > 0
+    
+    @classmethod
+    def poll(cls, context):
+        return bpy.data.filepath != ""
 
 # Main Windows
 class BVC_PT_Panel(bpy.types.Panel):
