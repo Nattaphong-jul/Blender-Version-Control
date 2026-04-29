@@ -160,18 +160,54 @@ class BVC_PT_Panel(bpy.types.Panel):
         layout = self.layout
         wm = context.window_manager
 
-        layout.operator("bvc.save_version", text="Save Version")
+        # File name header
+        blend_path = bpy.data.filepath
+        if not blend_path:
+            layout.label(text="Save your file first!", icon="ERROR")
+            return
 
+        blend_name = os.path.basename(blend_path)
+        layout.label(text=blend_name, icon="FILE_BLEND")
+        layout.separator()
+
+        # Save Version button
+        row = layout.row()
+        row.scale_y = 1.5
+        row.operator("bvc.save_version", text="Save a Version", icon="PLUS")
+
+        layout.separator()
+
+        # Version count label
+        count = len(wm.bvc_versions)
+        layout.label(text=f"Version History ({count})", icon="RECOVER_LAST")
+
+        # List
         layout.template_list(
             "BVC_UL_VersionList", "",
             wm, "bvc_versions",
             wm, "bvc_active_index",
-            rows=3,
+            rows=5,
         )
 
-        layout.operator("bvc.roll_back", text="Roll Back to Selected")
-        layout.operator("bvc.refresh", text="Refresh")
-        layout.operator("bvc.delete_version", text="Delete Selected")
+        # Detail box for selected version
+        idx = wm.bvc_active_index
+        if count > 0 and 0 <= idx < count:
+            sel = wm.bvc_versions[idx]
+            box = layout.box()
+            col = box.column(align=True)
+            col.label(text=sel.timestamp, icon="TIME")
+            if sel.description:
+                col.label(text=sel.description, icon="EDITMODE_HLT")
+            col.label(text=sel.size_label, icon="DISK_DRIVE")
+
+
+        # Rollback + Delete in one row
+        row = layout.row(align=True)
+        row.operator("bvc.roll_back", text="Go Back to This", icon="LOOP_BACK")
+        row.operator("bvc.delete_version", text="", icon="TRASH")
+
+        layout.separator()
+        layout.operator("bvc.refresh", text="Refresh List", icon="FILE_REFRESH")
 
 # Version history list [Column]
 class BVC_VersionItem(bpy.types.PropertyGroup):
