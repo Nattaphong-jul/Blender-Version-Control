@@ -147,6 +147,11 @@ class BVC_OT_RollBack(bpy.types.Operator):
         self.report({"INFO"}, f"Rolled back to {selected.timestamp}")
         bpy.ops.wm.revert_mainfile()
         return {"FINISHED"}
+    
+    @classmethod
+    def poll(cls, context):
+        wm = context.window_manager
+        return len(wm.bvc_versions) > 0
 
 # Main Windows
 class BVC_PT_Panel(bpy.types.Panel):
@@ -181,30 +186,33 @@ class BVC_PT_Panel(bpy.types.Panel):
         count = len(wm.bvc_versions)
         layout.label(text=f"Version History ({count})", icon="RECOVER_LAST")
 
-        # List
-        layout.template_list(
-            "BVC_UL_VersionList", "",
-            wm, "bvc_versions",
-            wm, "bvc_active_index",
-            rows=5,
-        )
-
-        # Detail box for selected version
-        idx = wm.bvc_active_index
-        if count > 0 and 0 <= idx < count:
-            sel = wm.bvc_versions[idx]
+        if count == 0:
             box = layout.box()
-            col = box.column(align=True)
-            col.label(text=sel.timestamp, icon="TIME")
-            if sel.description:
-                col.label(text=sel.description, icon="EDITMODE_HLT")
-            col.label(text=sel.size_label, icon="DISK_DRIVE")
+            box.label(text="No versions saved yet.", icon="INFO")
+        else:
+            layout.template_list(
+                "BVC_UL_VersionList", "",
+                wm, "bvc_versions",
+                wm, "bvc_active_index",
+                rows=5,
+            )
 
+            # Detail box, only shows when a version is selected
+            idx = wm.bvc_active_index
+            if 0 <= idx < count:
+                sel = wm.bvc_versions[idx]
+                box = layout.box()
+                col = box.column(align=True)
+                col.label(text=sel.timestamp, icon="TIME")
+                if sel.description:
+                    col.label(text=sel.description, icon="EDITMODE_HLT")
+                col.label(text=sel.size_label, icon="DISK_DRIVE")
 
-        # Rollback + Delete in one row
-        row = layout.row(align=True)
-        row.operator("bvc.roll_back", text="Go Back to This", icon="LOOP_BACK")
-        row.operator("bvc.delete_version", text="", icon="TRASH")
+                col.separator()
+                # Rollback + Delete inside the detail box
+                row = col.row(align=True)
+                row.operator("bvc.roll_back", text="Go Back to This", icon="LOOP_BACK")
+                row.operator("bvc.delete_version", text="", icon="TRASH")
 
         layout.separator()
         layout.operator("bvc.refresh", text="Refresh List", icon="FILE_REFRESH")
@@ -263,6 +271,11 @@ class BVC_OT_DeleteVersion(bpy.types.Operator):
         reload_version_list(context)
         self.report({"INFO"}, "Version deleted.")
         return {"FINISHED"}
+    
+    @classmethod
+    def poll(cls, context):
+        wm = context.window_manager
+        return len(wm.bvc_versions) > 0
 
 
 def register():
