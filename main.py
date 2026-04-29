@@ -10,6 +10,13 @@ import shutil
 import datetime
 import json
 
+def format_size(num_bytes: int) -> str:
+    for unit in ("B", "KB", "MB", "GB"):
+        if num_bytes < 1024:
+            return f"{num_bytes:.1f} {unit}"
+        num_bytes /= 1024
+    return f"{num_bytes:.1f} TB"
+
 def copy_file(source_path, destination_folder, description=""):
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S") # Format: YYYYMMDD_HHMMSS
     file_name = os.path.basename(source_path)
@@ -19,11 +26,12 @@ def copy_file(source_path, destination_folder, description=""):
 
     entries = load_manifest(manifest_path)
     entries.append({
-                "version_id": timestamp,
-                "timestamp": datetime.datetime.now().strftime("%d-%m-%Y %H:%M:%S"), # Format: DD-MM-YYYY HH:MM:SS
-                "description": description,
-                "file_name": file_name
-            })
+        "version_id": timestamp,
+        "timestamp": datetime.datetime.now().strftime("%d-%m-%Y %H:%M:%S"),
+        "description": description,
+        "file_name": file_name,
+        "size_label": format_size(os.path.getsize(source_path))
+    })
     write_manifest(manifest_path, entries)
 
     shutil.copy(source_path, os.path.join(destination_folder, timestamp))
@@ -54,6 +62,7 @@ def reload_version_list(context):
         item.version_id  = entry["version_id"]
         item.timestamp   = entry["timestamp"]
         item.description = entry["description"]
+        item.size_label = entry.get("size_label", "")
 
 @bpy.app.handlers.persistent
 def load_version_list(dummy):
@@ -166,9 +175,10 @@ class BVC_PT_Panel(bpy.types.Panel):
 
 # Version history list [Column]
 class BVC_VersionItem(bpy.types.PropertyGroup):
-    version_id: bpy.props.StringProperty()
-    timestamp: bpy.props.StringProperty()
-    description: bpy.props.StringProperty()
+    version_id  : bpy.props.StringProperty()
+    timestamp   : bpy.props.StringProperty()
+    description : bpy.props.StringProperty()
+    size_label  : bpy.props.StringProperty()
 
 class BVC_UL_VersionList(bpy.types.UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname):
