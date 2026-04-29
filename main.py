@@ -1,6 +1,10 @@
 bl_info = {
     "name": "Version Control",
+    "author": "Nattaphong Jullayakiat",
+    "version": (1, 0, 0),
     "blender": (3, 0, 0),
+    "location": "View3D > Sidebar > Versions",
+    "description": "Save and restore versions of your Blender project",
     "category": "System",
 }
 
