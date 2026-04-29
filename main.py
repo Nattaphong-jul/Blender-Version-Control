@@ -162,6 +162,7 @@ class BVC_PT_Panel(bpy.types.Panel):
 
         layout.operator("bvc.roll_back", text="Roll Back to Selected")
         layout.operator("bvc.refresh", text="Refresh")
+        layout.operator("bvc.delete_version", text="Delete Selected")
 
 # Version history list [Column]
 class BVC_VersionItem(bpy.types.PropertyGroup):
@@ -186,6 +187,38 @@ class BVC_OT_Refresh(bpy.types.Operator):
         self.report({"INFO"}, "Refreshed!")
         return {"FINISHED"}
 
+# Delete Version
+class BVC_OT_DeleteVersion(bpy.types.Operator):
+    bl_idname = "bvc.delete_version"
+    bl_label  = "Delete Version"
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_confirm(self, event)
+
+    def execute(self, context):
+        blend_path = bpy.data.filepath
+        wm = context.window_manager
+
+        index = wm.bvc_active_index
+        selected = wm.bvc_versions[index]
+
+        destination_folder = os.path.join(os.path.dirname(blend_path), ".bvc", "versions")
+        manifest_path = os.path.join(destination_folder, "manifest.json")
+        entries = load_manifest(manifest_path)
+
+        entry = next((e for e in entries if e["version_id"] == selected.version_id), None)
+        if entry:
+            version_folder = os.path.join(destination_folder, selected.version_id)
+            if os.path.exists(version_folder):
+                shutil.rmtree(version_folder)
+            entries.remove(entry)
+            write_manifest(manifest_path, entries)
+
+        reload_version_list(context)
+        self.report({"INFO"}, "Version deleted.")
+        return {"FINISHED"}
+
+
 def register():
     bpy.utils.register_class(BVC_OT_SaveVersion)
     bpy.utils.register_class(BVC_PT_Panel)
@@ -193,6 +226,7 @@ def register():
     bpy.utils.register_class(BVC_UL_VersionList)
     bpy.utils.register_class(BVC_OT_RollBack)
     bpy.utils.register_class(BVC_OT_Refresh)
+    bpy.utils.register_class(BVC_OT_DeleteVersion)
 
     bpy.types.WindowManager.bvc_versions = bpy.props.CollectionProperty(type=BVC_VersionItem)
     bpy.types.WindowManager.bvc_active_index = bpy.props.IntProperty(default=0)
@@ -206,6 +240,7 @@ def unregister():
     bpy.utils.unregister_class(BVC_UL_VersionList)
     bpy.utils.unregister_class(BVC_OT_RollBack)
     bpy.utils.unregister_class(BVC_OT_Refresh)
+    bpy.utils.unregister_class(BVC_OT_DeleteVersion)
     bpy.app.handlers.load_post.remove(load_version_list)
 
     del bpy.types.WindowManager.bvc_versions
