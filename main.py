@@ -84,6 +84,20 @@ class BVC_OT_SaveVersion(bpy.types.Operator):
     bl_idname = "bvc.save_version"
     bl_label  = "Save Version"
 
+    description: bpy.props.StringProperty(
+        name="Description",
+        default=""
+    )
+
+    def invoke(self, context, event):
+        if not bpy.data.filepath:
+            self.report({"ERROR"}, "Please save your file first!")
+            return {"CANCELLED"}
+        return context.window_manager.invoke_props_dialog(self, width=200)
+
+    def draw(self, context):
+        self.layout.prop(self, "description", text="Note")
+
     def execute(self, context):
         blend_path = bpy.data.filepath
         if not blend_path:
@@ -91,7 +105,7 @@ class BVC_OT_SaveVersion(bpy.types.Operator):
             return {"CANCELLED"}
     
         destination_folder = os.path.join(os.path.dirname(blend_path), ".bvc", "versions")
-        copy_file(blend_path, destination_folder)
+        copy_file(blend_path, destination_folder, description=self.description)
 
         reload_version_list(bpy.context)
 
