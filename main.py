@@ -139,6 +139,9 @@ class BVC_OT_RollBack(bpy.types.Operator):
         if not hasattr(wm, "bvc_versions"):
             return False
         return bpy.data.filepath != "" and len(wm.bvc_versions) > 0
+    
+    def invoke(self, context, event):
+        return context.window_manager.invoke_confirm(self, event)
 
     def execute(self, context):
         blend_path = bpy.data.filepath
