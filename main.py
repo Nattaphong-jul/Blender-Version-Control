@@ -105,6 +105,11 @@ class BVC_OT_SaveVersion(bpy.types.Operator):
             return {"CANCELLED"}
     
         destination_folder = os.path.join(os.path.dirname(blend_path), ".bvc", "versions")
+
+        # Save current blend file before copying
+        bpy.ops.wm.save_mainfile()
+
+        # Copy file to version folder
         copy_file(blend_path, destination_folder, description=self.description)
 
         reload_version_list(bpy.context)
