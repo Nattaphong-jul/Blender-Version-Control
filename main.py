@@ -72,9 +72,21 @@ class BVC_OT_SaveVersion(bpy.types.Operator):
         destination_folder = os.path.join(os.path.dirname(blend_path), ".bvc", "versions")
         copy_file(blend_path, destination_folder)
 
+        # Reload the list
+        wm = context.window_manager
+        wm.bvc_versions.clear()
+        manifest_path = os.path.join(destination_folder, "manifest.json")
+        entries = load_manifest(manifest_path)
+        for entry in reversed(entries):
+            item = wm.bvc_versions.add()
+            item.version_id  = entry["version_id"]
+            item.timestamp   = entry["timestamp"]
+            item.description = entry["description"]
+
         self.report({"INFO"}, "Version saved!")
         return {"FINISHED"}
 
+# Save Version Button
 class BVC_PT_Panel(bpy.types.Panel):
     bl_label       = "Version Control"
     bl_idname      = "BVC_PT_panel"
@@ -84,15 +96,47 @@ class BVC_PT_Panel(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
+        wm = context.window_manager
+
         layout.operator("bvc.save_version", text="Save Version")
+
+        layout.template_list(
+            "BVC_UL_VersionList", "",
+            wm, "bvc_versions",
+            wm, "bvc_active_index",
+            rows=3,
+        )
+
+# Version history list [Column]
+class BVC_VersionItem(bpy.types.PropertyGroup):
+    version_id: bpy.props.StringProperty()
+    timestamp: bpy.props.StringProperty()
+    description: bpy.props.StringProperty()
+
+class BVC_UL_VersionList(bpy.types.UIList):
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname):
+        if item.description:
+            layout.label(text=f"{item.timestamp}  —  {item.description}")
+        else:
+            layout.label(text=item.timestamp)
 
 def register():
     bpy.utils.register_class(BVC_OT_SaveVersion)
     bpy.utils.register_class(BVC_PT_Panel)
+    bpy.utils.register_class(BVC_VersionItem)
+    bpy.utils.register_class(BVC_UL_VersionList)
+
+    bpy.types.WindowManager.bvc_versions = bpy.props.CollectionProperty(type=BVC_VersionItem)
+    bpy.types.WindowManager.bvc_active_index = bpy.props.IntProperty(default=0)
 
 def unregister():
     bpy.utils.unregister_class(BVC_OT_SaveVersion)
     bpy.utils.unregister_class(BVC_PT_Panel)
+    bpy.utils.unregister_class(BVC_VersionItem)
+    bpy.utils.unregister_class(BVC_UL_VersionList)
+
+    del bpy.types.WindowManager.bvc_versions
+    del bpy.types.WindowManager.bvc_active_index
     
 if __name__ == "__main__":
     register()
