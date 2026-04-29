@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Version Control",
     "author": "Nattaphong Jullayakiat",
-    "version": (1, 0, 0),
+    "version": (0, 1, 1),
     "blender": (3, 0, 0),
     "location": "View3D > Sidebar > Versions",
     "description": "Save and restore versions of your Blender project",
@@ -66,7 +66,7 @@ def reload_version_list(context):
         item.version_id  = entry["version_id"]
         item.timestamp   = entry["timestamp"]
         item.description = entry["description"]
-        item.size_label = entry.get("size_label", "")
+        item.size_label  = entry.get("size_label", "")
 
 @bpy.app.handlers.persistent
 def load_version_list(dummy):
@@ -80,12 +80,12 @@ def roll_back(target_file, destination_folder, selected_id):
         if entry["version_id"] == selected_id:
             version_folder = os.path.join(destination_folder, entry["version_id"])
             source_file = os.path.join(version_folder, entry["file_name"])
-            
-            if os.path.exists(source_file):
-                # Copy latest version before rolling back
-                copy_file(target_file, destination_folder, description=f"Roll Back")
 
-                # Roll Back
+            if os.path.exists(source_file):
+                # Save current state as safety snapshot before rolling back
+                copy_file(target_file, destination_folder, description="Roll Back")
+
+                # Roll back
                 shutil.copy(source_file, target_file)
                 print(f"Successfully rolled back to version: {selected_id}")
             else:
@@ -102,10 +102,11 @@ class BVC_OT_SaveVersion(bpy.types.Operator):
         default=""
     )
 
+    @classmethod
+    def poll(cls, context):
+        return bpy.data.filepath != ""
+
     def invoke(self, context, event):
-        if not bpy.data.filepath:
-            self.report({"ERROR"}, "Please save your file first!")
-            return {"CANCELLED"}
         return context.window_manager.invoke_props_dialog(self, width=200)
 
     def draw(self, context):
@@ -113,10 +114,7 @@ class BVC_OT_SaveVersion(bpy.types.Operator):
 
     def execute(self, context):
         blend_path = bpy.data.filepath
-        if not blend_path:
-            self.report({"ERROR"}, "Please save your file first!")
-            return {"CANCELLED"}
-    
+
         destination_folder = os.path.join(os.path.dirname(blend_path), ".bvc", "versions")
 
         # Save current blend file before copying
@@ -130,16 +128,22 @@ class BVC_OT_SaveVersion(bpy.types.Operator):
         self.report({"INFO"}, "Version saved!")
         return {"FINISHED"}
 
-# Roll Back
+
 class BVC_OT_RollBack(bpy.types.Operator):
     bl_idname = "bvc.roll_back"
     bl_label  = "Roll Back"
+
+    @classmethod
+    def poll(cls, context):
+        wm = context.window_manager
+        if not hasattr(wm, "bvc_versions"):
+            return False
+        return bpy.data.filepath != "" and len(wm.bvc_versions) > 0
 
     def execute(self, context):
         blend_path = bpy.data.filepath
         wm = context.window_manager
 
-        # Get selected version from the list
         index = wm.bvc_active_index
         selected = wm.bvc_versions[index]
 
@@ -151,17 +155,71 @@ class BVC_OT_RollBack(bpy.types.Operator):
         self.report({"INFO"}, f"Rolled back to {selected.timestamp}")
         bpy.ops.wm.revert_mainfile()
         return {"FINISHED"}
-    
+
+
+class BVC_OT_DeleteVersion(bpy.types.Operator):
+    bl_idname = "bvc.delete_version"
+    bl_label  = "Delete Version"
+
     @classmethod
     def poll(cls, context):
         wm = context.window_manager
+        if not hasattr(wm, "bvc_versions"):
+            return False
         return len(wm.bvc_versions) > 0
-    
-    @classmethod
-    def poll(cls, context):
-        return bpy.data.filepath != ""
 
-# Main Windows
+    def invoke(self, context, event):
+        return context.window_manager.invoke_confirm(self, event)
+
+    def execute(self, context):
+        blend_path = bpy.data.filepath
+        wm = context.window_manager
+
+        index = wm.bvc_active_index
+        selected = wm.bvc_versions[index]
+
+        destination_folder = os.path.join(os.path.dirname(blend_path), ".bvc", "versions")
+        manifest_path = os.path.join(destination_folder, "manifest.json")
+        entries = load_manifest(manifest_path)
+
+        entry = next((e for e in entries if e["version_id"] == selected.version_id), None)
+        if entry:
+            version_folder = os.path.join(destination_folder, selected.version_id)
+            if os.path.exists(version_folder):
+                shutil.rmtree(version_folder)
+            entries.remove(entry)
+            write_manifest(manifest_path, entries)
+
+        reload_version_list(context)
+        self.report({"INFO"}, "Version deleted.")
+        return {"FINISHED"}
+
+
+class BVC_OT_Refresh(bpy.types.Operator):
+    bl_idname = "bvc.refresh"
+    bl_label  = "Refresh"
+
+    def execute(self, context):
+        reload_version_list(context)
+        self.report({"INFO"}, "Refreshed!")
+        return {"FINISHED"}
+
+
+class BVC_VersionItem(bpy.types.PropertyGroup):
+    version_id  : bpy.props.StringProperty()
+    timestamp   : bpy.props.StringProperty()
+    description : bpy.props.StringProperty()
+    size_label  : bpy.props.StringProperty()
+
+
+class BVC_UL_VersionList(bpy.types.UIList):
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname):
+        if item.description:
+            layout.label(text=f"{item.timestamp}  —  {item.description}")
+        else:
+            layout.label(text=item.timestamp)
+
+
 class BVC_PT_Panel(bpy.types.Panel):
     bl_label       = "Version Control"
     bl_idname      = "BVC_PT_panel"
@@ -172,6 +230,11 @@ class BVC_PT_Panel(bpy.types.Panel):
     def draw(self, context):
         layout = self.layout
         wm = context.window_manager
+
+        # Safety check — properties not registered yet
+        if not hasattr(wm, "bvc_versions"):
+            layout.label(text="Loading...", icon="INFO")
+            return
 
         # File name header
         blend_path = bpy.data.filepath
@@ -205,7 +268,7 @@ class BVC_PT_Panel(bpy.types.Panel):
                 rows=5,
             )
 
-            # Detail box, only shows when a version is selected
+            # Detail box — only shows when a version is selected
             idx = wm.bvc_active_index
             if 0 <= idx < count:
                 sel = wm.bvc_versions[idx]
@@ -225,93 +288,33 @@ class BVC_PT_Panel(bpy.types.Panel):
         layout.separator()
         layout.operator("bvc.refresh", text="Refresh List", icon="FILE_REFRESH")
 
-# Version history list [Column]
-class BVC_VersionItem(bpy.types.PropertyGroup):
-    version_id  : bpy.props.StringProperty()
-    timestamp   : bpy.props.StringProperty()
-    description : bpy.props.StringProperty()
-    size_label  : bpy.props.StringProperty()
 
-class BVC_UL_VersionList(bpy.types.UIList):
-    def draw_item(self, context, layout, data, item, icon, active_data, active_propname):
-        if item.description:
-            layout.label(text=f"{item.timestamp}  —  {item.description}")
-        else:
-            layout.label(text=item.timestamp)
-
-# Refresh Button
-class BVC_OT_Refresh(bpy.types.Operator):
-    bl_idname = "bvc.refresh"
-    bl_label  = "Refresh"
-
-    def execute(self, context):
-        reload_version_list(context)
-        self.report({"INFO"}, "Refreshed!")
-        return {"FINISHED"}
-
-# Delete Version
-class BVC_OT_DeleteVersion(bpy.types.Operator):
-    bl_idname = "bvc.delete_version"
-    bl_label  = "Delete Version"
-
-    def invoke(self, context, event):
-        return context.window_manager.invoke_confirm(self, event)
-
-    def execute(self, context):
-        blend_path = bpy.data.filepath
-        wm = context.window_manager
-
-        index = wm.bvc_active_index
-        selected = wm.bvc_versions[index]
-
-        destination_folder = os.path.join(os.path.dirname(blend_path), ".bvc", "versions")
-        manifest_path = os.path.join(destination_folder, "manifest.json")
-        entries = load_manifest(manifest_path)
-
-        entry = next((e for e in entries if e["version_id"] == selected.version_id), None)
-        if entry:
-            version_folder = os.path.join(destination_folder, selected.version_id)
-            if os.path.exists(version_folder):
-                shutil.rmtree(version_folder)
-            entries.remove(entry)
-            write_manifest(manifest_path, entries)
-
-        reload_version_list(context)
-        self.report({"INFO"}, "Version deleted.")
-        return {"FINISHED"}
-    
-    @classmethod
-    def poll(cls, context):
-        wm = context.window_manager
-        return len(wm.bvc_versions) > 0
-
+classes = (
+    BVC_VersionItem,
+    BVC_UL_VersionList,
+    BVC_OT_SaveVersion,
+    BVC_OT_RollBack,
+    BVC_OT_DeleteVersion,
+    BVC_OT_Refresh,
+    BVC_PT_Panel,
+)
 
 def register():
-    bpy.utils.register_class(BVC_OT_SaveVersion)
-    bpy.utils.register_class(BVC_PT_Panel)
-    bpy.utils.register_class(BVC_VersionItem)
-    bpy.utils.register_class(BVC_UL_VersionList)
-    bpy.utils.register_class(BVC_OT_RollBack)
-    bpy.utils.register_class(BVC_OT_Refresh)
-    bpy.utils.register_class(BVC_OT_DeleteVersion)
+    for cls in classes:
+        bpy.utils.register_class(cls)
 
     bpy.types.WindowManager.bvc_versions = bpy.props.CollectionProperty(type=BVC_VersionItem)
     bpy.types.WindowManager.bvc_active_index = bpy.props.IntProperty(default=0)
     bpy.app.handlers.load_post.append(load_version_list)
-    
 
 def unregister():
-    bpy.utils.unregister_class(BVC_OT_SaveVersion)
-    bpy.utils.unregister_class(BVC_PT_Panel)
-    bpy.utils.unregister_class(BVC_VersionItem)
-    bpy.utils.unregister_class(BVC_UL_VersionList)
-    bpy.utils.unregister_class(BVC_OT_RollBack)
-    bpy.utils.unregister_class(BVC_OT_Refresh)
-    bpy.utils.unregister_class(BVC_OT_DeleteVersion)
     bpy.app.handlers.load_post.remove(load_version_list)
 
     del bpy.types.WindowManager.bvc_versions
     del bpy.types.WindowManager.bvc_active_index
-    
+
+    for cls in reversed(classes):
+        bpy.utils.unregister_class(cls)
+
 if __name__ == "__main__":
     register()
