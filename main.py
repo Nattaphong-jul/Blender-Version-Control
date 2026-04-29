@@ -38,6 +38,27 @@ def write_manifest(manifest_path, entries):
     with open(manifest_path, "w") as manifest_file:
         json.dump(entries, manifest_file, indent=2)
 
+def reload_version_list(context):
+    blend_path = bpy.data.filepath
+    if not blend_path:
+        return
+
+    wm = context.window_manager
+    wm.bvc_versions.clear()
+
+    destination_folder = os.path.join(os.path.dirname(blend_path), ".bvc", "versions")
+    manifest_path = os.path.join(destination_folder, "manifest.json")
+    entries = load_manifest(manifest_path)
+    for entry in reversed(entries):
+        item = wm.bvc_versions.add()
+        item.version_id  = entry["version_id"]
+        item.timestamp   = entry["timestamp"]
+        item.description = entry["description"]
+
+@bpy.app.handlers.persistent
+def load_version_list(dummy):
+    reload_version_list(bpy.context)
+
 def roll_back(target_file, destination_folder, selected_id):
     manifest_path = os.path.join(destination_folder, "manifest.json")
     entries = load_manifest(manifest_path)
@@ -72,18 +93,31 @@ class BVC_OT_SaveVersion(bpy.types.Operator):
         destination_folder = os.path.join(os.path.dirname(blend_path), ".bvc", "versions")
         copy_file(blend_path, destination_folder)
 
-        # Reload the list
-        wm = context.window_manager
-        wm.bvc_versions.clear()
-        manifest_path = os.path.join(destination_folder, "manifest.json")
-        entries = load_manifest(manifest_path)
-        for entry in reversed(entries):
-            item = wm.bvc_versions.add()
-            item.version_id  = entry["version_id"]
-            item.timestamp   = entry["timestamp"]
-            item.description = entry["description"]
+        reload_version_list(bpy.context)
 
         self.report({"INFO"}, "Version saved!")
+        return {"FINISHED"}
+
+# Roll Back
+class BVC_OT_RollBack(bpy.types.Operator):
+    bl_idname = "bvc.roll_back"
+    bl_label  = "Roll Back"
+
+    def execute(self, context):
+        blend_path = bpy.data.filepath
+        wm = context.window_manager
+
+        # Get selected version from the list
+        index = wm.bvc_active_index
+        selected = wm.bvc_versions[index]
+
+        destination_folder = os.path.join(os.path.dirname(blend_path), ".bvc", "versions")
+        roll_back(blend_path, destination_folder, selected.version_id)
+
+        reload_version_list(bpy.context)
+
+        self.report({"INFO"}, f"Rolled back to {selected.timestamp}")
+        bpy.ops.wm.revert_mainfile()
         return {"FINISHED"}
 
 # Save Version Button
@@ -107,6 +141,8 @@ class BVC_PT_Panel(bpy.types.Panel):
             rows=3,
         )
 
+        layout.operator("bvc.roll_back", text="Roll Back to Selected")
+
 # Version history list [Column]
 class BVC_VersionItem(bpy.types.PropertyGroup):
     version_id: bpy.props.StringProperty()
@@ -125,15 +161,19 @@ def register():
     bpy.utils.register_class(BVC_PT_Panel)
     bpy.utils.register_class(BVC_VersionItem)
     bpy.utils.register_class(BVC_UL_VersionList)
+    bpy.utils.register_class(BVC_OT_RollBack)
 
     bpy.types.WindowManager.bvc_versions = bpy.props.CollectionProperty(type=BVC_VersionItem)
     bpy.types.WindowManager.bvc_active_index = bpy.props.IntProperty(default=0)
+    bpy.app.handlers.load_post.append(load_version_list)
 
 def unregister():
     bpy.utils.unregister_class(BVC_OT_SaveVersion)
     bpy.utils.unregister_class(BVC_PT_Panel)
     bpy.utils.unregister_class(BVC_VersionItem)
     bpy.utils.unregister_class(BVC_UL_VersionList)
+    bpy.utils.unregister_class(BVC_OT_RollBack)
+    bpy.app.handlers.load_post.remove(load_version_list)
 
     del bpy.types.WindowManager.bvc_versions
     del bpy.types.WindowManager.bvc_active_index
