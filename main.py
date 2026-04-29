@@ -134,7 +134,7 @@ class BVC_OT_RollBack(bpy.types.Operator):
         bpy.ops.wm.revert_mainfile()
         return {"FINISHED"}
 
-# Save Version Button
+# Main Windows
 class BVC_PT_Panel(bpy.types.Panel):
     bl_label       = "Version Control"
     bl_idname      = "BVC_PT_panel"
@@ -156,6 +156,7 @@ class BVC_PT_Panel(bpy.types.Panel):
         )
 
         layout.operator("bvc.roll_back", text="Roll Back to Selected")
+        layout.operator("bvc.refresh", text="Refresh")
 
 # Version history list [Column]
 class BVC_VersionItem(bpy.types.PropertyGroup):
@@ -170,16 +171,28 @@ class BVC_UL_VersionList(bpy.types.UIList):
         else:
             layout.label(text=item.timestamp)
 
+# Refresh Button
+class BVC_OT_Refresh(bpy.types.Operator):
+    bl_idname = "bvc.refresh"
+    bl_label  = "Refresh"
+
+    def execute(self, context):
+        reload_version_list(context)
+        self.report({"INFO"}, "Refreshed!")
+        return {"FINISHED"}
+
 def register():
     bpy.utils.register_class(BVC_OT_SaveVersion)
     bpy.utils.register_class(BVC_PT_Panel)
     bpy.utils.register_class(BVC_VersionItem)
     bpy.utils.register_class(BVC_UL_VersionList)
     bpy.utils.register_class(BVC_OT_RollBack)
+    bpy.utils.register_class(BVC_OT_Refresh)
 
     bpy.types.WindowManager.bvc_versions = bpy.props.CollectionProperty(type=BVC_VersionItem)
     bpy.types.WindowManager.bvc_active_index = bpy.props.IntProperty(default=0)
     bpy.app.handlers.load_post.append(load_version_list)
+    
 
 def unregister():
     bpy.utils.unregister_class(BVC_OT_SaveVersion)
@@ -187,6 +200,7 @@ def unregister():
     bpy.utils.unregister_class(BVC_VersionItem)
     bpy.utils.unregister_class(BVC_UL_VersionList)
     bpy.utils.unregister_class(BVC_OT_RollBack)
+    bpy.utils.unregister_class(BVC_OT_Refresh)
     bpy.app.handlers.load_post.remove(load_version_list)
 
     del bpy.types.WindowManager.bvc_versions
