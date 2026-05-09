@@ -5,7 +5,7 @@
 bl_info = {
     "name": "Version Control",
     "author": "Nattaphong Jullayakiat",
-    "version": (0, 1, 0),
+    "version": (0, 1, 1),
     "blender": (3, 0, 0),
     "location": "View3D > Sidebar > Versions",
     "description": "Save and restore versions of your Blender project",
@@ -76,7 +76,7 @@ def reload_version_list(context):
 def load_version_list(dummy):
     reload_version_list(bpy.context)
 
-def roll_back(target_file, destination_folder, selected_id):
+def roll_back(target_file, destination_folder, selected_id, selected_description):
     manifest_path = os.path.join(destination_folder, "manifest.json")
     entries = load_manifest(manifest_path)
 
@@ -86,8 +86,9 @@ def roll_back(target_file, destination_folder, selected_id):
             source_file = os.path.join(version_folder, entry["file_name"])
 
             if os.path.exists(source_file):
-                # Save current state as safety snapshot before rolling back
-                copy_file(target_file, destination_folder, description="Roll Back")
+                # Label shows where we rolled back to
+                snapshot_description = f"Roll Back \u2192 {selected_description}" if selected_description else f"Roll Back \u2192 {entry['timestamp']}"
+                copy_file(target_file, destination_folder, description=snapshot_description)
 
                 # Roll back
                 shutil.copy(source_file, target_file)
@@ -158,7 +159,7 @@ class BVC_OT_RollBack(bpy.types.Operator):
         selected = wm.bvc_versions[index]
 
         destination_folder = os.path.join(os.path.dirname(blend_path), ".bvc", "versions")
-        roll_back(blend_path, destination_folder, selected.version_id)
+        roll_back(blend_path, destination_folder, selected.version_id, selected.description)
 
         reload_version_list(bpy.context)
 
