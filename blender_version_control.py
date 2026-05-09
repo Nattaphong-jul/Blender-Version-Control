@@ -35,7 +35,7 @@ def copy_file(source_path, destination_folder, description=""):
     entries = load_manifest(manifest_path)
     entries.append({
         "version_id": timestamp,
-        "timestamp": datetime.datetime.now().strftime("%d-%m-%Y %H:%M:%S"),
+        "timestamp": datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
         "description": description,
         "file_name": file_name,
         "size_label": format_size(os.path.getsize(source_path))
