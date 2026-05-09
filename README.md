@@ -16,7 +16,7 @@ no Git knowledge required.
 <table>
   <tr>
     <td><img width="400" alt="Usage 1" src="https://github.com/user-attachments/assets/0ddec608-1def-4fff-9f53-acb80cd43b1c" /></td>
-    <td><img width="400" alt="Usage 2" src="https://github.com/user-attachments/assets/ebd0d8fe-ecf4-4fbc-a31a-cd87f70d2481" /></td>
+    <td><img width="400" alt="roll back description" src="https://github.com/user-attachments/assets/490a11ba-8a21-402a-aa1e-1e90f809f964" /></td>
   </tr>
 </table>
 
