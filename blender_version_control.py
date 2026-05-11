@@ -5,7 +5,7 @@
 bl_info = {
     "name": "Version Control",
     "author": "Nattaphong Jullayakiat",
-    "version": (0, 1, 1),
+    "version": (0, 1, 3),
     "blender": (3, 0, 0),
     "location": "View3D > Sidebar > Versions",
     "description": "Save and restore versions of your Blender project",
@@ -18,6 +18,7 @@ import shutil
 import datetime
 import json
 
+
 def format_size(num_bytes: int) -> str:
     for unit in ("B", "KB", "MB", "GB"):
         if num_bytes < 1024:
@@ -25,8 +26,9 @@ def format_size(num_bytes: int) -> str:
         num_bytes /= 1024
     return f"{num_bytes:.1f} TB"
 
+
 def copy_file(source_path, destination_folder, description=""):
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S") # Format: YYYYMMDD_HHMMSS
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")  # Format: YYYYMMDD_HHMMSS
     file_name = os.path.basename(source_path)
     manifest_path = os.path.join(destination_folder, "manifest.json")
 
@@ -44,15 +46,18 @@ def copy_file(source_path, destination_folder, description=""):
 
     shutil.copy(source_path, os.path.join(destination_folder, timestamp))
 
+
 def load_manifest(manifest_path) -> list:
     if os.path.exists(manifest_path):
         with open(manifest_path, "r") as manifest_file:
             return json.load(manifest_file)
     return []
 
+
 def write_manifest(manifest_path, entries):
     with open(manifest_path, "w") as manifest_file:
         json.dump(entries, manifest_file, indent=2)
+
 
 def reload_version_list(context):
     blend_path = bpy.data.filepath
@@ -72,9 +77,11 @@ def reload_version_list(context):
         item.description = entry["description"]
         item.size_label  = entry.get("size_label", "")
 
+
 @bpy.app.handlers.persistent
 def load_version_list(dummy):
     reload_version_list(bpy.context)
+
 
 def roll_back(target_file, destination_folder, selected_id, selected_description):
     manifest_path = os.path.join(destination_folder, "manifest.json")
@@ -107,27 +114,37 @@ class BVC_OT_SaveVersion(bpy.types.Operator):
         default=""
     )
 
+    _block_unsaved = False
+
     @classmethod
     def poll(cls, context):
         return bpy.data.filepath != ""
 
     def invoke(self, context, event):
+        if bpy.data.is_dirty:
+            self._block_unsaved = True
+            return context.window_manager.invoke_props_dialog(self, width=280)
+
+        self._block_unsaved = False
         return context.window_manager.invoke_props_dialog(self, width=200)
 
     def draw(self, context):
-        self.layout.prop(self, "description", text="Note")
+        if self._block_unsaved:
+            col = self.layout.column(align=True)
+            col.label(text="You have unsaved changes.", icon="ERROR")
+            col.label(text="Please save first (Ctrl+S) before backing up.")
+        else:
+            self.layout.prop(self, "description", text="Note")
 
     def execute(self, context):
-        blend_path = bpy.data.filepath
+        if self._block_unsaved:
+            return {"CANCELLED"}
 
+        blend_path = bpy.data.filepath
         destination_folder = os.path.join(os.path.dirname(blend_path), ".bvc", "versions")
 
-        # Save current blend file before copying
         bpy.ops.wm.save_mainfile()
-
-        # Copy file to version folder
         copy_file(blend_path, destination_folder, description=self.description)
-
         reload_version_list(bpy.context)
 
         self.report({"INFO"}, "Version saved!")
@@ -138,6 +155,8 @@ class BVC_OT_RollBack(bpy.types.Operator):
     bl_idname = "bvc.roll_back"
     bl_label  = "Roll Back"
 
+    _block_unsaved = False
+
     @classmethod
     def poll(cls, context):
         wm = context.window_manager
@@ -146,13 +165,26 @@ class BVC_OT_RollBack(bpy.types.Operator):
         return bpy.data.filepath != "" and len(wm.bvc_versions) > 0
 
     def invoke(self, context, event):
+        if bpy.data.is_dirty:
+            self._block_unsaved = True
+            return context.window_manager.invoke_props_dialog(self, width=280)
+
+        self._block_unsaved = False
         return context.window_manager.invoke_confirm(self, event)
 
+    def draw(self, context):
+        if self._block_unsaved:
+            col = self.layout.column(align=True)
+            col.label(text="You have unsaved changes.", icon="ERROR")
+            col.label(text="Please save first (Ctrl+S) before rolling back.")
+
     def execute(self, context):
+        if self._block_unsaved:
+            return {"CANCELLED"}
+
         blend_path = bpy.data.filepath
         wm = context.window_manager
 
-        # Save unsaved changes before creating the safety snapshot
         bpy.ops.wm.save_mainfile()
 
         index = wm.bvc_active_index
