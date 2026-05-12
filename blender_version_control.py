@@ -5,7 +5,7 @@
 bl_info = {
     "name": "Version Control",
     "author": "Nattaphong Jullayakiat",
-    "version": (0, 1, 3),
+    "version": (0, 2, 0),
     "blender": (3, 0, 0),
     "location": "View3D > Sidebar > Versions",
     "description": "Save and restore versions of your Blender project",
@@ -67,10 +67,14 @@ def reload_version_list(context):
     wm = context.window_manager
     wm.bvc_versions.clear()
 
+    current_file_name = os.path.basename(blend_path)  # v0.2.0: filter by current file
+
     destination_folder = os.path.join(os.path.dirname(blend_path), ".bvc", "versions")
     manifest_path = os.path.join(destination_folder, "manifest.json")
     entries = load_manifest(manifest_path)
     for entry in reversed(entries):
+        if entry.get("file_name") != current_file_name:  # v0.2.0: skip other files
+            continue
         item = wm.bvc_versions.add()
         item.version_id  = entry["version_id"]
         item.timestamp   = entry["timestamp"]
@@ -302,7 +306,19 @@ class BVC_PT_Panel(bpy.types.Panel):
 
         if count == 0:
             box = layout.box()
-            box.label(text="No versions saved yet.", icon="INFO")
+            
+            # Check if there are versions in the manifest under a different filename
+            destination_folder = os.path.join(os.path.dirname(blend_path), ".bvc", "versions")
+            manifest_path = os.path.join(destination_folder, "manifest.json")
+            all_entries = load_manifest(manifest_path)
+            current_name = os.path.basename(blend_path)
+            other_names = set(e["file_name"] for e in all_entries if e.get("file_name") != current_name)
+            
+            if other_names:
+                box.label(text="No versions saved yet.", icon="INFO")
+                box.label(text="Was this file renamed?", icon="QUESTION")
+            else:
+                box.label(text="No versions saved yet.", icon="INFO")
         else:
             layout.template_list(
                 "BVC_UL_VersionList", "",
