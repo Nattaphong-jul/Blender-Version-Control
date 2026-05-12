@@ -306,7 +306,19 @@ class BVC_PT_Panel(bpy.types.Panel):
 
         if count == 0:
             box = layout.box()
-            box.label(text="No versions saved yet.", icon="INFO")
+            
+            # Check if there are versions in the manifest under a different filename
+            destination_folder = os.path.join(os.path.dirname(blend_path), ".bvc", "versions")
+            manifest_path = os.path.join(destination_folder, "manifest.json")
+            all_entries = load_manifest(manifest_path)
+            current_name = os.path.basename(blend_path)
+            other_names = set(e["file_name"] for e in all_entries if e.get("file_name") != current_name)
+            
+            if other_names:
+                box.label(text="No versions saved yet.", icon="INFO")
+                box.label(text="Was this file renamed?", icon="QUESTION")
+            else:
+                box.label(text="No versions saved yet.", icon="INFO")
         else:
             layout.template_list(
                 "BVC_UL_VersionList", "",
